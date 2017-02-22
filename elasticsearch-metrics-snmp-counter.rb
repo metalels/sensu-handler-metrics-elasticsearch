@@ -2,12 +2,18 @@
 #
 # Sensu Elasticsearch Metrics Handler
 
-require 'rubygems' if RUBY_VERSION < '1.9.0'
+# uses File.write
+if RUBY_VERSION < '2.0.0'
+  STDERR.puts "can't use this handler with ruby <= 1.9"
+  exit 2;
+end
+
 require 'sensu-handler'
 require 'net/http'
 require 'timeout'
 require 'digest/md5'
 require 'date'
+require 'base64'
 
 class ElasticsearchMetrics < Sensu::Handler
   def host
@@ -40,6 +46,26 @@ class ElasticsearchMetrics < Sensu::Handler
     @event['check']['name']
   end
 
+  def cache_root
+    @event['check']['cache'] || "/tmp/sensu/"
+  end
+
+  def cache_path(key)
+    "#{cache_root}/#{Base64.encode64(key)}"
+  end
+
+  def read_cache(key)
+    File.read cache_path(key)
+  rescue
+    nil
+  end
+
+  def write_cache(key, val)
+    File.write cache_path(key), val
+  rescue
+    nil
+  end
+
   def handle
     metrics ={}
     @event['check']['output'].split("\n").each do |line|
@@ -49,6 +75,10 @@ class ElasticsearchMetrics < Sensu::Handler
         puts "elasticsearch parse error."
         next
       end
+      cache = read_cache v[0]
+      next unless write_cache v[0], v[1] # have to after read_cache
+      next unless cache # have to after write_cache
+      v[1] = v[1].to_i - cache.to_i
 
       metrics = {
         :@timestamp => time_stamp,
