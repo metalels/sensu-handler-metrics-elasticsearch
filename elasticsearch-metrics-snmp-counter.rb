@@ -79,6 +79,10 @@ class ElasticsearchMetrics < Sensu::Handler
       next unless write_cache v[0], v[1] # have to after read_cache
       next unless cache # have to after write_cache
       v[1] = v[1].to_i - cache.to_i
+      if v[1] < 0 # counter has cleard
+        # select 32bit or 64bit from cache value
+        v[1] += cache.to_i > 4294967925 ? 18446744073709551615 : 4294967925
+      end
 
       metrics = {
         :@timestamp => time_stamp,
